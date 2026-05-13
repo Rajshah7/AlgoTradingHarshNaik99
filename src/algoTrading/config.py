@@ -1,0 +1,47 @@
+# =============================
+# config.py
+# =============================
+
+class Config:
+    TIMEFRAME = "M5"
+    BARS = 90000
+    INITIAL_CAPITAL = 100
+    DATA_PATH = "data/sample_data.csv"
+    STRATEGY = "mark2,mark_dollar_supertrend"                    # comma-separated for multi-strategy: STRATEGY = "mark2,mark_dollar_supertrend,engulfing""
+    RISK_PER_TRADE = 0.03
+    # SYMBOL = "XAUUSD"           # comma-separated for multi-symbol: "XAUUSD,EURUSD,GBPUSD,AUDUSD"
+    SYMBOL = "XAUUSD"#,EURUSD,GBPUSD,USDJPY,XAGUSD"  
+    LOT_SIZE = 0.01
+    STOP_LOSS = 50
+    TAKE_PROFIT = 100
+    MODE = "mt5"
+
+    # -------------------------------------------------------
+    # Mark2 / MarkDollarSuperTrend TP Settings
+    #
+    # TP_MODE   : which target to use
+    #   "rr"         → R:R ratio  (entry ± RR × risk)
+    #   "st"         → Supertrend line
+    #   "both"       → whichever is hit first (closer of the two)
+    #   "fix_profit" → fixed price distance regardless of risk
+    #                  LONG  TP = entry + FIX_PROFIT
+    #                  SHORT TP = entry - FIX_PROFIT
+    #
+    # RR         : multiplier used when TP_MODE = "rr" or "both"
+    # FIX_PROFIT : price units of profit when TP_MODE = "fix_profit"
+    #              e.g. 5 → $5 for XAUUSD, 50 pips for EURUSD (0.0050)
+    # -------------------------------------------------------
+    RR         = 3
+    TP_MODE    = "rr"   # "rr" | "st" | "both" | "fix_profit"
+    FIX_PROFIT = 5      # price-unit target when TP_MODE = "fix_profit"
+
+    # Minimum candles the PREVIOUS trend must have lasted before the flip
+    # counts as a valid X/Y candle.  Filters 1-2 candle micro-flips caused
+    # by MT5 vs TradingView data discrepancies.  Set to 1 to disable.
+    MIN_TREND_CANDLES = 1
+
+    # Maximum candle size (high - low) allowed for a signal candle.
+    # Candles larger than this are skipped to avoid chasing volatile spikes.
+    # Set to None to disable.
+    MAX_CANDLE_SIZE = 13
+

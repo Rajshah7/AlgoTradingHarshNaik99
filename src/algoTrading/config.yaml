@@ -1,0 +1,23 @@
+# =====================================================================
+# config.yaml — per-strategy overrides
+# Values here take priority over config.py defaults.
+# =====================================================================
+
+strategies:
+  mark2:
+    lot_size: 0.01
+
+  mark_dollar_supertrend:
+    lot_size: 0.01
+
+  engulfing:
+    lot_size: 0.01
+
+  engulfing_consolidation:
+    lot_size: 0.01
+
+  engulfing_reversal:
+    lot_size: 0.01
+
+  green_dollar:
+    lot_size: 0.01
