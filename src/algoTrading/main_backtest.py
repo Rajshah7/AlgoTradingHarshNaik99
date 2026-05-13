@@ -19,6 +19,7 @@ from algoTrading.strategies.engulfing_consolidation import EngulfingConsolidatio
 from algoTrading.strategies.mark2_strategy import Mark2Strategy
 from algoTrading.strategies.engulfing_reversal import EngulfingReversalStrategy
 from algoTrading.strategies.mark_dollar_supertrend import MarkDollarSuperTrendStrategy
+from algoTrading.strategies.rsi_engulfing_strategy import RSIEngulfingStrategy
 
 BASE = Path(__file__).resolve().parent
 
@@ -31,6 +32,7 @@ STRATEGY_MAP = {
     "engulfing_reversal":      EngulfingReversalStrategy,
     "mark2":                   Mark2Strategy,
     "mark_dollar_supertrend":  MarkDollarSuperTrendStrategy,
+    "rsi_engulfing":           RSIEngulfingStrategy,
 }
 
 

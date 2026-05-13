@@ -17,6 +17,17 @@ def _load_lot_size(strategy_key: str) -> float:
         return float(Config.LOT_SIZE)
 
 
+def _load_rr(strategy_key: str) -> float:
+    """Read rr for a strategy from config.yaml; fall back to Config.RR."""
+    try:
+        import yaml
+        with open(_YAML_PATH, "r") as f:
+            data = yaml.safe_load(f)
+        return float(data["strategies"][strategy_key]["rr"])
+    except Exception:
+        return float(Config.RR)
+
+
 class Mark2Strategy:
 
     _STRATEGY_KEY = "mark2"
@@ -24,7 +35,7 @@ class Mark2Strategy:
     def __init__(self, period=10, multiplier=3):
         self.period            = period
         self.multiplier        = multiplier
-        self.rr                = Config.RR
+        self.rr                = _load_rr(self._STRATEGY_KEY)
         self.tp_mode           = Config.TP_MODE
         self.fix_profit        = getattr(Config, 'FIX_PROFIT', 5)
         self.min_trend_candles = Config.MIN_TREND_CANDLES

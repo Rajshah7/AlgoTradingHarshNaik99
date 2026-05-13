@@ -4,11 +4,11 @@
 
 class Config:
     TIMEFRAME = "M5"
-    BARS = 90000
+    BARS = 99000
     INITIAL_CAPITAL = 100
     DATA_PATH = "data/sample_data.csv"
-    STRATEGY = "mark2,mark_dollar_supertrend"                    # comma-separated for multi-strategy: STRATEGY = "mark2,mark_dollar_supertrend,engulfing""
-    RISK_PER_TRADE = 0.03
+    STRATEGY = "rsi_engulfing,mark2,mark_dollar_supertrend"                    # comma-separated for multi-strategy: STRATEGY = "mark2,mark_dollar_supertrend,engulfing""
+    RISK_PER_TRADE = 0.05
     # SYMBOL = "XAUUSD"           # comma-separated for multi-symbol: "XAUUSD,EURUSD,GBPUSD,AUDUSD"
     SYMBOL = "XAUUSD"#,EURUSD,GBPUSD,USDJPY,XAGUSD"  
     LOT_SIZE = 0.01
@@ -31,7 +31,7 @@ class Config:
     # FIX_PROFIT : price units of profit when TP_MODE = "fix_profit"
     #              e.g. 5 → $5 for XAUUSD, 50 pips for EURUSD (0.0050)
     # -------------------------------------------------------
-    RR         = 3
+    RR         = 2.5
     TP_MODE    = "rr"   # "rr" | "st" | "both" | "fix_profit"
     FIX_PROFIT = 5      # price-unit target when TP_MODE = "fix_profit"
 
@@ -43,5 +43,5 @@ class Config:
     # Maximum candle size (high - low) allowed for a signal candle.
     # Candles larger than this are skipped to avoid chasing volatile spikes.
     # Set to None to disable.
-    MAX_CANDLE_SIZE = 13
+    MAX_CANDLE_SIZE = 9
 

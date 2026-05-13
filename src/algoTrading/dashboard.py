@@ -434,6 +434,8 @@ def build_dashboard():
         sl_str  = f"{float(sl_val):.2f}" if pd.notna(sl_val) else "—"
         tp_str  = f"{float(tp_val):.2f}" if pd.notna(tp_val) else "—"
         label   = str(r.get('exit_label', r.get('exit_reason', '')))
+        lot_val = r.get('lot_size')
+        lot_str = f"{float(lot_val):.4f}" if pd.notna(lot_val) else "—"
         rows.append({
             "num":      idx + 1,
             "time":     str(r['time'])[:16],
@@ -445,6 +447,7 @@ def build_dashboard():
             "target": tp_str,
             "exit":   round(float(r.get('exit_price',  0)), 2),
             "label":  label,
+            "lot":    lot_str,
             "profit": round(float(r['profit']), 2),
             "cap":    round(float(r['capital']), 2),
         })
@@ -851,8 +854,11 @@ tbody td.muted{{color:#3d4451;font-size:11px;font-family:'Segoe UI',system-ui,sa
 <!-- Charts -->
 <div class="charts">
   <div class="chart-box">
-    <div class="chart-lbl">Equity Curve</div>
-    <canvas id="eqChart" height="110"></canvas>
+    <div class="chart-lbl" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <span>Equity Curve <span style="font-size:9px;color:#2d3a4a;font-weight:400;margin-left:6px">scroll = zoom &nbsp;·&nbsp; drag = pan</span></span>
+      <button id="eqResetBtn" style="padding:2px 10px;font-size:9px;font-weight:700;border-radius:2px;border:1px solid #1c2332;background:#090b0f;color:#3d4451;cursor:pointer;letter-spacing:.08em;transition:color .15s,border-color .15s" onmouseover="this.style.color='#e6edf3';this.style.borderColor='#d29922'" onmouseout="this.style.color='#3d4451';this.style.borderColor='#1c2332'">RESET</button>
+    </div>
+    <canvas id="eqChart" height="110" style="cursor:grab"></canvas>
   </div>
   <div class="chart-box">
     <div class="chart-lbl">Trade P&amp;L</div>
@@ -895,6 +901,7 @@ tbody td.muted{{color:#3d4451;font-size:11px;font-family:'Segoe UI',system-ui,sa
         <th>Target</th>
         <th>Exit</th>
         <th>Closed By</th>
+        <th>Lot Size</th>
         <th>P &amp; L</th>
         <th>Capital</th>
       </tr>
@@ -1262,6 +1269,7 @@ document.addEventListener('keydown', function(e) {{
       '<td style="color:#a78bfa">' + r.target + '</td>' +
       '<td class="hl">'      + r.exit   + '</td>' +
       '<td>'                 + closedBadge + '</td>' +
+      '<td class="muted">'   + (r.lot || '—') + '</td>' +
       '<td class="' + (win ? 'win-txt' : 'los-txt') + '">' + pnlStr + '</td>' +
       '<td style="color:#60a5fa">' + capStr + '</td>' +
       '</tr>';
@@ -1283,36 +1291,106 @@ document.addEventListener('keydown', function(e) {{
   render();
 }})();
 
-// ── Equity Curve ──────────────────────────────
+// ── Equity Curve with zoom + pan ──────────────
 if (typeof Chart !== 'undefined') {{
-  new Chart(document.getElementById('eqChart'), {{
-    type: 'line',
-    data: {{
-      labels: eqLabels,
-      datasets: [{{
-        data: eqData,
-        borderColor: '#3b82f6',
-        backgroundColor: 'rgba(59,130,246,0.06)',
-        borderWidth: 2,
-        pointRadius: 0,
-        fill: true,
-        tension: 0.35
-      }}]
-    }},
-    options: {{
-      animation: false,
-      plugins: {{ legend: {{ display: false }} }},
-      scales: {{
-        x: {{ display: false }},
-        y: {{
-          grid: {{ color: '#1a2540' }},
-          ticks: {{
-            color: '#334155',
-            callback: function(v) {{ return '$' + v.toLocaleString(); }}
+  var _eqFull   = eqData.slice();
+  var _eqLblFull = eqLabels.slice();
+  var _eqS = 0, _eqE = _eqFull.length - 1;
+  var _eqInst  = null;
+  var _eqDragX = null, _eqDragS = null, _eqDragE = null;
+  var _eqThrottle = 0;
+
+  function _fmtEqLbl(lbl) {{
+    if (lbl === 'Start') return 'Start';
+    var d = new Date(lbl.replace(' ', 'T'));
+    if (isNaN(d)) return lbl;
+    return d.toLocaleDateString('en-GB', {{ day: '2-digit', month: 'short', year: '2-digit' }});
+  }}
+
+  function _drawEq() {{
+    var lbls = _eqLblFull.slice(_eqS, _eqE + 1).map(_fmtEqLbl);
+    var data = _eqFull.slice(_eqS, _eqE + 1);
+    if (_eqInst) {{ _eqInst.destroy(); _eqInst = null; }}
+    _eqInst = new Chart(document.getElementById('eqChart'), {{
+      type: 'line',
+      data: {{
+        labels: lbls,
+        datasets: [{{
+          data: data,
+          borderColor: '#3b82f6',
+          backgroundColor: 'rgba(59,130,246,0.06)',
+          borderWidth: 2,
+          pointRadius: 0,
+          fill: true,
+          tension: 0.35
+        }}]
+      }},
+      options: {{
+        animation: false,
+        plugins: {{ legend: {{ display: false }} }},
+        scales: {{
+          x: {{
+            display: true,
+            grid: {{ color: '#1a2540' }},
+            ticks: {{
+              color: '#334155',
+              maxRotation: 40,
+              autoSkip: true,
+              maxTicksLimit: 8
+            }}
+          }},
+          y: {{
+            grid: {{ color: '#1a2540' }},
+            ticks: {{
+              color: '#334155',
+              callback: function(v) {{ return '$' + v.toLocaleString(); }}
+            }}
           }}
         }}
       }}
-    }}
+    }});
+  }}
+
+  _drawEq();
+
+  var _eqCvs = document.getElementById('eqChart');
+
+  _eqCvs.addEventListener('wheel', function(e) {{
+    e.preventDefault();
+    var total  = _eqFull.length - 1;
+    var range  = _eqE - _eqS;
+    var center = Math.round(_eqS + range / 2);
+    var factor = e.deltaY < 0 ? 0.65 : 1.55;
+    var nr = Math.max(4, Math.min(total, Math.round(range * factor)));
+    var half = Math.round(nr / 2);
+    _eqS = Math.max(0, center - half);
+    _eqE = Math.min(total, _eqS + nr);
+    if (_eqE === total) _eqS = Math.max(0, total - nr);
+    _drawEq();
+  }}, {{ passive: false }});
+
+  _eqCvs.addEventListener('mousedown', function(e) {{
+    _eqDragX = e.clientX; _eqDragS = _eqS; _eqDragE = _eqE;
+    _eqCvs.style.cursor = 'grabbing';
+  }});
+  _eqCvs.addEventListener('mousemove', function(e) {{
+    if (_eqDragX === null) return;
+    var now = Date.now();
+    if (now - _eqThrottle < 40) return;
+    _eqThrottle = now;
+    var total = _eqFull.length - 1;
+    var range = _eqDragE - _eqDragS;
+    var shift = -Math.round((e.clientX - _eqDragX) / (_eqCvs.clientWidth || 600) * range);
+    _eqS = Math.max(0, Math.min(total - range, _eqDragS + shift));
+    _eqE = Math.min(total, _eqS + range);
+    _drawEq();
+  }});
+  function _eqStopDrag() {{ _eqDragX = null; _eqCvs.style.cursor = 'grab'; }}
+  _eqCvs.addEventListener('mouseup',    _eqStopDrag);
+  _eqCvs.addEventListener('mouseleave', _eqStopDrag);
+
+  document.getElementById('eqResetBtn').addEventListener('click', function() {{
+    _eqS = 0; _eqE = _eqFull.length - 1; _drawEq();
   }});
 
   // ── P&L Bars ─────────────────────────────────

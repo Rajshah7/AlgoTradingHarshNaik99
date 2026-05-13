@@ -6,18 +6,25 @@
 strategies:
   mark2:
     lot_size: 0.01
+    rr: 2.5
 
   mark_dollar_supertrend:
     lot_size: 0.01
+    rr: 3.0
 
   engulfing:
     lot_size: 0.01
 
   engulfing_consolidation:
     lot_size: 0.01
+    rr: 3.0
 
   engulfing_reversal:
     lot_size: 0.01
 
   green_dollar:
     lot_size: 0.01
+
+  rsi_engulfing:
+    lot_size: 0.01
+    rr: 1.0
