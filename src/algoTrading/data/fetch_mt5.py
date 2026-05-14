@@ -2,6 +2,7 @@ import json
 import time
 import MetaTrader5 as mt5
 import pandas as pd
+from datetime import datetime
 from pathlib import Path
 
 TIMEFRAME_MAP = {
@@ -21,8 +22,8 @@ def _meta_path(save_path: str) -> Path:
     return Path(save_path).with_suffix(".meta")
 
 
-def _cache_valid(save_path: str, timeframe: str) -> bool:
-    """Return True if the cached CSV is < 1 hour old and was built for the same timeframe."""
+def _cache_valid(save_path: str, timeframe: str, from_date: datetime | None) -> bool:
+    """Return True if cached CSV is < 1 hour old, same timeframe, and same from_date."""
     csv_p  = Path(save_path)
     meta_p = _meta_path(save_path)
 
@@ -37,37 +38,61 @@ def _cache_valid(save_path: str, timeframe: str) -> bool:
     if meta.get("timeframe") != timeframe:
         return False
 
+    # Invalidate if from_date changed
+    cached_from = meta.get("from_date")
+    new_from    = from_date.strftime("%Y-%m-%d") if from_date else None
+    if cached_from != new_from:
+        return False
+
     age_seconds = time.time() - meta.get("cached_at", 0)
     return age_seconds < CACHE_TTL
 
 
-def fetch_and_store(symbol, timeframe, bars, save_path):
+def fetch_and_store(symbol, timeframe, bars, save_path, from_date: datetime | None = None):
 
     # ── Cache hit: skip MT5 fetch ─────────────────────────────────
-    if _cache_valid(save_path, timeframe):
-        meta    = json.loads(_meta_path(save_path).read_text())
-        age_min = int((time.time() - meta["cached_at"]) / 60)
+    if _cache_valid(save_path, timeframe, from_date):
+        meta      = json.loads(_meta_path(save_path).read_text())
+        age_min   = int((time.time() - meta["cached_at"]) / 60)
         remaining = int((CACHE_TTL - (time.time() - meta["cached_at"])) / 60)
         print(f"✅ Cache hit — {symbol} {timeframe} | cached {age_min}m ago | refreshes in ~{remaining}m")
         return
-
-    # ── Cache miss: fetch from MT5 ────────────────────────────────
-    print(f"🔄 Fetching {bars} bars for {symbol} {timeframe} from MT5...")
 
     tf = TIMEFRAME_MAP.get(timeframe)
     if tf is None:
         raise ValueError(f"❌ Invalid timeframe: {timeframe!r}")
 
-    rates = mt5.copy_rates_from_pos(symbol, tf, 0, bars)
+    # ── Calculate bar count from start date (if given) ────────────
+    # Use copy_rates_from_pos — most reliable across all MT5 brokers.
+    # Bar count is calculated from START_YEAR so we always cover the full range.
+    if from_date is not None:
+        # M5 = 12 bars/h × 24h × 5 trading days/week × 52 weeks ≈ 74,880/year
+        # Use 80,000/year + 20% buffer to be safe
+        years     = max(1, (datetime.utcnow() - from_date).days / 365.25)
+        bar_count = min(int(years * 80_000 * 1.2), 3_000_000)
+        print(f"🔄 Fetching {symbol} {timeframe} | "
+              f"START_DATE={from_date.date()} | ~{bar_count:,} bars ...")
+    else:
+        bar_count = bars
+        print(f"🔄 Fetching {bar_count:,} bars for {symbol} {timeframe} from MT5...")
 
-    if rates is None:
+    # Try requested count, then fall back to smaller counts if broker rejects
+    rates = None
+    for attempt_count in sorted({bar_count, 99_999, 50_000, 10_000}, reverse=True):
+        if attempt_count > bar_count:
+            continue
+        rates = mt5.copy_rates_from_pos(symbol, tf, 0, attempt_count)
+        if rates is not None and len(rates) > 0:
+            if attempt_count < bar_count:
+                print(f"  Broker limit hit — fetched {attempt_count:,} bars instead of {bar_count:,}")
+            break
+        print(f"  Retrying with {attempt_count:,} bars ...")
+
+    if rates is None or len(rates) == 0:
         print("❌ Error:", mt5.last_error())
         raise Exception("Failed to fetch MT5 data")
 
-    if len(rates) == 0:
-        raise Exception("❌ No data returned")
-
-    print(f"✅ Received {len(rates)} bars")
+    print(f"✅ Received {len(rates):,} bars")
 
     df = pd.DataFrame(rates)
     df['time'] = pd.to_datetime(df['time'], unit='s')
@@ -78,13 +103,14 @@ def fetch_and_store(symbol, timeframe, bars, save_path):
         csv_p.unlink()
 
     df.to_csv(save_path, index=False)
-    print(f"✅ Data saved to {save_path}")
+    print(f"✅ Data saved to {save_path}  ({df['time'].min().date()} → {df['time'].max().date()})")
 
     # Write / update sidecar metadata
     _meta_path(save_path).write_text(json.dumps({
         "symbol":    symbol,
         "timeframe": timeframe,
         "bars":      len(df),
+        "from_date": from_date.strftime("%Y-%m-%d") if from_date else None,
         "cached_at": time.time(),
     }))
     print(f"📦 Cache written — next refresh in 1h")

@@ -208,6 +208,21 @@ def _load_trade_markers(ohlcv: list) -> list:
                                 "color": "#ef5350", "shape": "circle",
                                 "text": "SL", "size": 1})
 
+    # ── SKIP markers from skip_data.csv ──────────────────────────────
+    skip_p = Path(__file__).resolve().parent / "data" / "skip_data.csv"
+    if skip_p.exists():
+        try:
+            sk = pd.read_csv(skip_p)
+            sk['ts'] = pd.to_datetime(sk['time']).apply(lambda x: int(x.timestamp()))
+            for _, row in sk.iterrows():
+                bt = snap(int(row['ts']))
+                if bt is not None:
+                    markers.append({"time": bt, "position": "aboveBar",
+                                    "color": "#94a3b8", "shape": "square",
+                                    "text": "SKIP", "size": 1})
+        except Exception:
+            pass
+
     markers.sort(key=lambda m: m['time'])
     return markers
 
@@ -340,6 +355,9 @@ def build_dashboard():
     losses = done[done['profit'] < 0]
     nw, nl = len(wins), len(losses)
 
+    n_long  = int((done['type'] == 'SELL').sum())    # closed LONG trades
+    n_short = int((done['type'] == 'COVER').sum())   # closed SHORT trades
+
     start_cap    = caps[0] - profits[0]
     end_cap      = caps[-1]
     total_profit = round(end_cap - start_cap, 2)
@@ -388,7 +406,6 @@ def build_dashboard():
         ml = (grp['profit'] < 0).sum()
         mt = len(grp)
         mp = round(grp['profit'].sum(), 2)
-        # Return % = month P&L / capital at start of month
         first        = grp.iloc[0]
         month_start  = float(first['capital']) - float(first['profit'])
         profit_pct   = round(mp / month_start * 100, 2) if month_start else 0
@@ -401,6 +418,28 @@ def build_dashboard():
             "profit":     mp,
             "profit_pct": profit_pct,
             "win_rate":   win_rate,
+        })
+
+    # ── Weekly breakdown ──────────────────────────────────────────────
+    done['_week'] = pd.to_datetime(done['time'], errors='coerce').dt.to_period('W')
+    weekly_rows = []
+    for period, grp in done.groupby('_week'):
+        ww = (grp['profit'] > 0).sum()
+        wl = (grp['profit'] < 0).sum()
+        wt = len(grp)
+        wp = round(grp['profit'].sum(), 2)
+        first       = grp.iloc[0]
+        week_start  = float(first['capital']) - float(first['profit'])
+        wpct        = round(wp / week_start * 100, 2) if week_start else 0
+        wwr         = round(float(ww) / wt * 100, 1) if wt else 0
+        weekly_rows.append({
+            "week":       str(period),
+            "trades":     wt,
+            "wins":       int(ww),
+            "losses":     int(wl),
+            "profit":     wp,
+            "profit_pct": wpct,
+            "win_rate":   wwr,
         })
 
     # ── Per-symbol breakdown ─────────────────────────────────────
@@ -464,6 +503,7 @@ def build_dashboard():
     symbols_str    = ", ".join(sorted(done['symbol'].dropna().unique()))   if 'symbol'   in done.columns else ""
 
     html = _render(
+        weekly_rows=weekly_rows,
         m={
             "start_cap":       round(start_cap, 2),
             "end_cap":         round(end_cap, 2),
@@ -472,6 +512,8 @@ def build_dashboard():
             "n":               n,
             "nw":              nw,
             "nl":              nl,
+            "n_long":          n_long,
+            "n_short":         n_short,
             "win_rate":        win_rate,
             "avg_win":         avg_win,
             "avg_loss":        avg_loss,
@@ -531,7 +573,7 @@ def build_dashboard():
             print(f"[dashboard] could not open browser: {e}")
 
 
-def _render(m, rows, monthly_rows, eq_labels, eq_data, profits,
+def _render(m, rows, monthly_rows, weekly_rows, eq_labels, eq_data, profits,
             date_from, date_to, chartjs="", lwc="", ohlcv_json="[]", st_json="[]", markers_json="[]",
             symbols_data=None, win_streak_trades=None, loss_streak_trades=None):
 
@@ -558,6 +600,7 @@ def _render(m, rows, monthly_rows, eq_labels, eq_data, profits,
 
     rows_j          = json.dumps(rows)
     monthly_rows_j  = json.dumps(monthly_rows)
+    weekly_rows_j   = json.dumps(weekly_rows)
     eq_labels_j     = json.dumps(eq_labels)
     eq_data_j       = json.dumps(eq_data)
     profits_j       = json.dumps(profits)
@@ -712,6 +755,17 @@ tbody td.muted{{color:#3d4451;font-size:11px;font-family:'Segoe UI',system-ui,sa
 .btn-toggle.on{{background:rgba(47,129,247,.1);border-color:#2f81f7;color:#2f81f7}}
 #candleChart{{width:100%;height:520px;overflow:hidden}}
 
+/* ── Collapsible sections ── */
+.section-block{{margin-bottom:18px}}
+.section-toggle{{display:flex;align-items:center;justify-content:space-between;padding:8px 16px;background:#0d1117;border:1px solid #1c2332;border-radius:2px;cursor:pointer;user-select:none;transition:border-color .15s}}
+.section-toggle:hover{{border-color:#d29922}}
+.section-block-lbl{{font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:#6e7681;font-weight:700}}
+.section-block-meta{{font-size:10px;color:#3d4451;font-family:'Courier New',monospace}}
+.toggle-icon{{font-size:11px;color:#3d4451;transition:transform .2s;flex-shrink:0}}
+.section-block.collapsed .toggle-icon{{transform:rotate(-90deg)}}
+.section-block.collapsed .section-body{{display:none}}
+.section-body{{padding-top:10px}}
+
 /* ── Responsive ── */
 @media(max-width:900px){{
   .charts{{grid-template-columns:1fr}}
@@ -754,13 +808,13 @@ tbody td.muted{{color:#3d4451;font-size:11px;font-family:'Segoe UI',system-ui,sa
 <!-- ══════════════════ PERFORMANCE PANE ══════════════════ -->
 <div id="pane-performance" class="tab-pane active">
 
-<!-- Section label -->
-<div class="section-hdr">
-  <span class="section-lbl">Overall Performance</span>
-  <span class="section-sub">All symbols combined &nbsp;·&nbsp; {m['n']} closed trades &nbsp;·&nbsp; {date_from[:10]} → {date_to[:10]}</span>
+<!-- ── Metric Cards ── -->
+<div class="section-block">
+<div class="section-toggle" onclick="toggleSection(this)">
+  <div><span class="section-block-lbl">Overall Performance</span>&nbsp;&nbsp;<span class="section-block-meta">All symbols &nbsp;·&nbsp; {m['n']} trades &nbsp;·&nbsp; {date_from[:10]} → {date_to[:10]}</span></div>
+  <span class="toggle-icon">▼</span>
 </div>
-
-<!-- Metric Cards -->
+<div class="section-body">
 <div class="cards">
 
   <div class="card">
@@ -779,6 +833,18 @@ tbody td.muted{{color:#3d4451;font-size:11px;font-family:'Segoe UI',system-ui,sa
     <div class="card-lbl">Win Rate</div>
     <div class="card-val {wr_color}">{m['win_rate']}%</div>
     <div class="card-sub">{m['nw']}W &nbsp;·&nbsp; {m['nl']}L &nbsp;·&nbsp; {m['n']} total</div>
+  </div>
+
+  <div class="card">
+    <div class="card-lbl">Total Buy (Long)</div>
+    <div class="card-val clr-green">{m['n_long']}</div>
+    <div class="card-sub">{round(m['n_long'] / m['n'] * 100, 1) if m['n'] else 0}% of all trades</div>
+  </div>
+
+  <div class="card">
+    <div class="card-lbl">Total Sell (Short)</div>
+    <div class="card-val clr-red">{m['n_short']}</div>
+    <div class="card-sub">{round(m['n_short'] / m['n'] * 100, 1) if m['n'] else 0}% of all trades</div>
   </div>
 
   <div class="card">
@@ -842,16 +908,27 @@ tbody td.muted{{color:#3d4451;font-size:11px;font-family:'Segoe UI',system-ui,sa
   </div>
 
 </div>
+</div><!-- /section-body metrics -->
+</div><!-- /section-block metrics -->
 
-<!-- Symbol breakdown (rendered by JS) -->
-<div id="sym-section" style="display:none">
-  <div class="sym-section-hdr">
-    <div class="sym-section-lbl">Symbol Breakdown</div>
-  </div>
+<!-- ── Symbol Breakdown ── -->
+<div class="section-block" id="sym-section" style="display:none">
+<div class="section-toggle" onclick="toggleSection(this)">
+  <span class="section-block-lbl">Symbol Breakdown</span>
+  <span class="toggle-icon">▼</span>
+</div>
+<div class="section-body">
   <div id="sym-cards" class="sym-cards"></div>
 </div>
+</div>
 
-<!-- Charts -->
+<!-- ── Charts ── -->
+<div class="section-block">
+<div class="section-toggle" onclick="toggleSection(this)">
+  <span class="section-block-lbl">Equity &amp; P&amp;L Charts</span>
+  <span class="toggle-icon">▼</span>
+</div>
+<div class="section-body">
 <div class="charts">
   <div class="chart-box">
     <div class="chart-lbl" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
@@ -865,15 +942,43 @@ tbody td.muted{{color:#3d4451;font-size:11px;font-family:'Segoe UI',system-ui,sa
     <canvas id="plChart" height="110"></canvas>
   </div>
 </div>
+</div>
+</div><!-- /section-block charts -->
 
-<!-- Monthly Calendar -->
-<div class="tbl-box">
-  <div class="tbl-lbl">Monthly Performance Calendar</div>
+<!-- ── Monthly Calendar ── -->
+<div class="section-block">
+<div class="section-toggle" onclick="toggleSection(this)">
+  <span class="section-block-lbl">Monthly Performance</span>
+  <span class="toggle-icon">▼</span>
+</div>
+<div class="section-body">
+<div class="tbl-box" style="margin-bottom:0">
   <div id="month-calendar" class="month-calendar"></div>
 </div>
+</div>
+</div><!-- /section-block monthly -->
 
-<!-- Trade Log -->
-<div class="tbl-box">
+<!-- ── Weekly Calendar ── -->
+<div class="section-block">
+<div class="section-toggle" onclick="toggleSection(this)">
+  <span class="section-block-lbl">Weekly Performance</span>
+  <span class="toggle-icon">▼</span>
+</div>
+<div class="section-body">
+<div class="tbl-box" style="margin-bottom:0">
+  <div id="week-calendar" class="month-calendar"></div>
+</div>
+</div>
+</div><!-- /section-block weekly -->
+
+<!-- ── Trade Log ── -->
+<div class="section-block">
+<div class="section-toggle" onclick="toggleSection(this)">
+  <span class="section-block-lbl">Trade Log</span>
+  <span class="toggle-icon">▼</span>
+</div>
+<div class="section-body">
+<div class="tbl-box" style="margin-bottom:0">
   <div class="tbl-hdr">
     <div class="tbl-lbl" style="margin-bottom:0">Trade Log</div>
     <div class="filter-bar">
@@ -909,10 +1014,17 @@ tbody td.muted{{color:#3d4451;font-size:11px;font-family:'Segoe UI',system-ui,sa
     <tbody id="tbody"></tbody>
   </table>
 </div>
+</div>
+</div><!-- /section-block trade log -->
 
-<!-- Symbol summary table (built by JS) -->
-<div class="sym-table-wrap" id="symTableWrap" style="display:none">
-  <div class="sym-table-lbl">Symbol Performance Summary</div>
+<!-- ── Symbol Summary Table ── -->
+<div class="section-block" id="symTableWrap" style="display:none">
+<div class="section-toggle" onclick="toggleSection(this)">
+  <span class="section-block-lbl">Symbol Performance Summary</span>
+  <span class="toggle-icon">▼</span>
+</div>
+<div class="section-body">
+<div class="sym-table-wrap" style="margin-bottom:0">
   <table class="sym-tbl">
     <thead>
       <tr>
@@ -929,6 +1041,8 @@ tbody td.muted{{color:#3d4451;font-size:11px;font-family:'Segoe UI',system-ui,sa
     <tfoot id="symTfoot"></tfoot>
   </table>
 </div>
+</div>
+</div><!-- /section-block symbol summary -->
 
 </div><!-- /pane-performance -->
 
@@ -975,6 +1089,7 @@ tbody td.muted{{color:#3d4451;font-size:11px;font-family:'Segoe UI',system-ui,sa
 <script>
 var rows        = {rows_j};
 var monthlyRows = {monthly_rows_j};
+var weeklyRows  = {weekly_rows_j};
 var eqLabels    = {eq_labels_j};
 var eqData      = {eq_data_j};
 var plData      = {profits_j};
@@ -985,6 +1100,11 @@ var markersData = {markers_json};
 var symbolsData      = {symbols_data_j};
 var winStreakTrades  = {win_streak_trades_j};
 var lossStreakTrades = {loss_streak_trades_j};
+
+// ── Collapsible sections ──────────────────────────────────────
+function toggleSection(el) {{
+  el.closest('.section-block').classList.toggle('collapsed');
+}}
 
 // ── Tab switching ──────────────────────────────────────────────
 function switchTab(name, btn) {{
@@ -1037,6 +1157,31 @@ function switchTab(name, btn) {{
       '</div>';
   }});
   cal.innerHTML = html;
+}})();
+
+// ── Weekly Calendar ──────────────────────────────────────────
+(function() {{
+  var cal  = document.getElementById('week-calendar');
+  var html = '';
+  weeklyRows.forEach(function(r) {{
+    var pos    = r.profit >= 0;
+    var pnlStr = (pos ? '+$' : '-$') + Math.abs(r.profit).toFixed(2);
+    var pctStr = (pos ? '&#9650; ' : '&#9660; ') + Math.abs(r.profit_pct).toFixed(2) + '%';
+    var pctClr = pos ? '#3fb950' : '#f85149';
+    var wrClr  = r.win_rate >= 50 ? '#3fb950' : '#f85149';
+    html +=
+      '<div class="month-cell ' + (pos ? 'mc-profit' : 'mc-loss') + '">' +
+        '<div class="mc-name">' + r.week + '</div>' +
+        '<div class="mc-pnl ' + (pos ? 'mc-pos' : 'mc-neg') + '">' + pnlStr + '</div>' +
+        '<div style="font-size:11px;font-family:monospace;color:' + pctClr + ';margin-bottom:6px;font-weight:700">' + pctStr + '</div>' +
+        '<hr class="mc-divider">' +
+        '<div class="mc-row"><span class="mc-lbl">Trades</span>  <span class="mc-val c-trades">' + r.trades   + '</span></div>' +
+        '<div class="mc-row"><span class="mc-lbl">Wins</span>    <span class="mc-val c-wins">'   + r.wins     + '</span></div>' +
+        '<div class="mc-row"><span class="mc-lbl">Losses</span>  <span class="mc-val c-losses">' + r.losses   + '</span></div>' +
+        '<div class="mc-row"><span class="mc-lbl">Win Rate</span><span class="mc-val" style="color:' + wrClr + '">' + r.win_rate + '%</span></div>' +
+      '</div>';
+  }});
+  cal.innerHTML = html || '<div style="color:#3d4451;font-size:11px;padding:10px">No weekly data</div>';
 }})();
 
 // ── Symbol color palette (defined first — used by all blocks below) ──

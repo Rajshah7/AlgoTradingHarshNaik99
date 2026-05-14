@@ -4,17 +4,25 @@
 
 class Config:
     TIMEFRAME = "M5"
-    BARS = 99000
     INITIAL_CAPITAL = 100
-    DATA_PATH = "data/sample_data.csv"
-    STRATEGY = "rsi_engulfing,mark2,mark_dollar_supertrend"                    # comma-separated for multi-strategy: STRATEGY = "mark2,mark_dollar_supertrend,engulfing""
-    RISK_PER_TRADE = 0.05
-    # SYMBOL = "XAUUSD"           # comma-separated for multi-symbol: "XAUUSD,EURUSD,GBPUSD,AUDUSD"
-    SYMBOL = "XAUUSD"#,EURUSD,GBPUSD,USDJPY,XAGUSD"  
+    STRATEGY = "mark_dollar_supertrend"                    # comma-separated for multi-strategy: STRATEGY = "mark2,mark_dollar_supertrend,engulfing""
+    RISK_PER_TRADE = 0.01
+    #SYMBOL = "XAUUSD"           # comma-separated for multi-symbol: "XAUUSD,EURUSD,GBPUSD,AUDUSD"
+    SYMBOL = "XAUUSD"#EURUSD,GBPUSD,USDJPY,XAGUSD"  
     LOT_SIZE = 0.01
-    STOP_LOSS = 50
-    TAKE_PROFIT = 100
-    MODE = "mt5"
+    # STOP_LOSS = 50
+    # TAKE_PROFIT = 100
+    MODE = "mt5"   # "mt5" → fetch live from MetaTrader5 | "csv" → use local CSV (Kaggle)
+
+    # MT5 account credentials — leave None to use whatever terminal is already open
+    MT5_LOGIN    = 52879886
+    MT5_PASSWORD = "zF!X0XEP1hvwWP"
+    MT5_SERVER   = "ICMarketsSC-Demo"
+
+    # Backtest date range — set both to filter bars, or None to use all data.
+    # Format: "YYYY-MM-DD"
+    START_DATE = "2016-01-01"   # earliest IC Markets M5 bar
+    END_DATE   = "2026-05-14"          # up to latest available bar
 
     # -------------------------------------------------------
     # Mark2 / MarkDollarSuperTrend TP Settings
@@ -43,5 +51,9 @@ class Config:
     # Maximum candle size (high - low) allowed for a signal candle.
     # Candles larger than this are skipped to avoid chasing volatile spikes.
     # Set to None to disable.
-    MAX_CANDLE_SIZE = 9
+    MAX_CANDLE_SIZE = 15
+
+    # Stop taking new trades after this many losses in one calendar day.
+    # Set to None to disable.
+    MAX_DAILY_LOSSES = 2
 

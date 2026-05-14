@@ -18,23 +18,36 @@ class BacktestEngine:
 
         self.trades           = []
         self._tp_mode         = Config.TP_MODE
-        self._open_strategy   = ""   # strategy that opened the current position
+        self._open_strategy   = ""
+
+        self._daily_losses = 0
+        self._current_day  = None
 
     def run(self, df, save=True):
 
         df = df.reset_index(drop=True)
+        max_daily_losses = getattr(Config, 'MAX_DAILY_LOSSES', None)
 
         for i in range(len(df)):
             row = df.iloc[i]
 
             signal = row.get('signal', 0)
-            close = row['close']
-            time = row['time']
+            close  = row['close']
+            time   = row['time']
+
+            # Reset daily loss counter on new calendar day
+            bar_day = pd.Timestamp(time).date()
+            if bar_day != self._current_day:
+                self._current_day  = bar_day
+                self._daily_losses = 0
+
+            day_blocked = (max_daily_losses is not None
+                           and self._daily_losses >= max_daily_losses)
 
             # =========================
             # LONG ENTRY
             # =========================
-            if signal == 1 and self.position == 0:
+            if signal == 1 and self.position == 0 and not day_blocked:
 
                 sl = row.get('sl')
                 tp = row.get('tp')
@@ -121,6 +134,9 @@ class BacktestEngine:
                         "capital":     self.capital,
                     })
 
+                    if profit < 0:
+                        self._daily_losses += 1
+
                     self.position = 0
                     self.entry_price = None
                     self.sl = None
@@ -129,7 +145,7 @@ class BacktestEngine:
             # =========================
             # SHORT ENTRY
             # =========================
-            elif signal == -1 and self.position == 0:
+            elif signal == -1 and self.position == 0 and not day_blocked:
 
                 sl = row.get('sl')
                 tp = row.get('tp')
@@ -216,6 +232,9 @@ class BacktestEngine:
                         "exit_label":  close_label,
                         "capital":     self.capital,
                     })
+
+                    if profit < 0:
+                        self._daily_losses += 1
 
                     self.position = 0
                     self.entry_price = None

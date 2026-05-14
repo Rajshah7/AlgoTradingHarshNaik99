@@ -35,6 +35,18 @@ class MarkDollarSuperTrendStrategy(Mark2Strategy):
             return False
         return (row['high'] - row['low']) > self.max_candle_size
 
+    def _candle_strong(self, row) -> bool:
+        """
+        True if the candle has good body strength.
+        Body must be >= 50% of the full high-low range.
+        Filters doji / indecision / wick-heavy candles.
+        """
+        full_range = row['high'] - row['low']
+        if full_range <= 0:
+            return False
+        body = abs(row['close'] - row['open'])
+        return (body / full_range) >= 0.5
+
     # ── GreenDollar indicator columns ─────────────────────────────────
 
     def _prepare_dollar_flags(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -109,9 +121,10 @@ class MarkDollarSuperTrendStrategy(Mark2Strategy):
 
                 # Rule 1: X candle engulfs in the NEW trend direction → direct entry
                 if (new_trend == 1 and self.is_bullish_engulfing(prev_x, row_x)
-                        and not self._candle_too_big(row_x)):
+                        and not self._candle_too_big(row_x)
+                        and self._candle_strong(row_x)):
                     entry = closes[i]
-                    sl    = lows[i]
+                    sl    = lows[i] - (highs[i] - lows[i]) * 0.05
                     risk  = entry - sl
                     if risk > 0:
                         df.at[i, 'signal'] = 1
@@ -123,9 +136,10 @@ class MarkDollarSuperTrendStrategy(Mark2Strategy):
                     done         = True
 
                 elif (new_trend == -1 and self.is_bearish_engulfing(prev_x, row_x)
-                        and not self._candle_too_big(row_x)):
+                        and not self._candle_too_big(row_x)
+                        and self._candle_strong(row_x)):
                     entry = closes[i]
-                    sl    = highs[i]
+                    sl    = highs[i] + (highs[i] - lows[i]) * 0.05
                     risk  = sl - entry
                     if risk > 0:
                         df.at[i, 'signal'] = -1
@@ -170,9 +184,11 @@ class MarkDollarSuperTrendStrategy(Mark2Strategy):
             if active_trend == 1:
                 if closes[i] > running_ref:
                     done = True
-                elif self.is_bearish_engulfing(prev_c, curr_c) and not self._candle_too_big(curr_c):
+                elif (self.is_bearish_engulfing(prev_c, curr_c)
+                        and not self._candle_too_big(curr_c)
+                        and self._candle_strong(curr_c)):
                     entry = closes[i]
-                    sl    = max(running_ref, highs[i])
+                    sl    = max(running_ref, highs[i]) + (highs[i] - lows[i]) * 0.05
                     risk  = sl - entry
                     if risk > 0:
                         df.at[i, 'signal'] = -1
@@ -187,9 +203,11 @@ class MarkDollarSuperTrendStrategy(Mark2Strategy):
             elif active_trend == -1:
                 if closes[i] < running_ref:
                     done = True
-                elif self.is_bullish_engulfing(prev_c, curr_c) and not self._candle_too_big(curr_c):
+                elif (self.is_bullish_engulfing(prev_c, curr_c)
+                        and not self._candle_too_big(curr_c)
+                        and self._candle_strong(curr_c)):
                     entry = closes[i]
-                    sl    = min(running_ref, lows[i])
+                    sl    = min(running_ref, lows[i]) - (highs[i] - lows[i]) * 0.05
                     risk  = entry - sl
                     if risk > 0:
                         df.at[i, 'signal'] = 1

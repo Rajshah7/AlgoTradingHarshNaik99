@@ -10,7 +10,7 @@ strategies:
 
   mark_dollar_supertrend:
     lot_size: 0.01
-    rr: 3.0
+    rr: 2.5
 
   engulfing:
     lot_size: 0.01
@@ -27,4 +27,4 @@ strategies:
 
   rsi_engulfing:
     lot_size: 0.01
-    rr: 1.0
+    rr: 3.0
