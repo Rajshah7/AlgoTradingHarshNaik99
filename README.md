@@ -1,3 +1,15 @@
+Step 1: Install Environment
+pip install pandas numpy matplotlib pandas-ta backtrader requests fastapi uvicorn
+
+python.exe -m pip install --upgrade pip
+
+
+<!-- Meta Trader 5 -->
+pip install MetaTrader5 pandas
+
+
+python -m algoTrading.main_backtest
+
 # AlgoTrading
 
 A Python algorithmic trading system built on MetaTrader5 (MT5). Supports backtesting across multiple strategies and symbols, live trading, and an interactive chart dashboard.
