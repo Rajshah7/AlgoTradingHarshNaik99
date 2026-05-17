@@ -9,7 +9,7 @@ src/algoTrading/strategies/__pycache__/
 
 # Python cache
 __pycache__/
-*.py[cod]
+*.pyc[cod]
 
 # Virtual env
 venv/

@@ -21,7 +21,7 @@ class Config:
 
     # Backtest date range — set both to filter bars, or None to use all data.
     # Format: "YYYY-MM-DD"
-    START_DATE = "2016-01-01"   # earliest IC Markets M5 bar
+    START_DATE = "2020-01-01"   # earliest IC Markets M5 bar
     END_DATE   = "2026-05-14"          # up to latest available bar
 
     # -------------------------------------------------------
