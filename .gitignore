@@ -1,0 +1,20 @@
+# Ignore Python cache files
+src/__pycache__/*
+src/algoTrading/__pycache__/*
+src/algoTrading/backtest/__pycache__/
+src/algoTrading/broker/__pycache__/
+src/algoTrading/core/__pycache__/
+src/algoTrading/data/__pycache__/
+src/algoTrading/strategies/__pycache__/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Virtual env
+venv/
+.env
+
+# IDE
+.idea/
+.vscode/
